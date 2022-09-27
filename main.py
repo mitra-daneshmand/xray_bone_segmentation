@@ -53,26 +53,22 @@ def generate_ds(train_df, val_df):
 
     return train_df, val_df
 
-
 def estimate_mean_std(dataset):
     mean_std_loader = DataLoader(dataset, batch_size=16, num_workers=16, pin_memory=torch.cuda.is_available())
-    mean_vector = None
-    std_vector = None
+    len_inputs = len(mean_std_loader.sampler)
+    mean = 0
+    std = 0
     for sample in tqdm(mean_std_loader, desc='Computing mean and std values:'):
         local_batch, local_labels = sample['xs'], sample['ys']
 
-        if mean_vector is None:
-            mean_vector = np.zeros(local_batch.size(1))
-            std_vector = np.zeros(local_batch.size(1))
-        for j in range(mean_vector.shape[0]):
+        for j in range(local_batch.shape[0]):
+            mean += local_batch.float()[j, 0, :, :].mean()
+            std += local_batch.float()[j, 0, :, :].std()
 
-            mean_vector[j] += local_batch.float()[j, 0, :, :].mean()
-            std_vector[j] += local_batch.float()[j, 0, :, :].std()
+    mean /= len_inputs
+    std /= len_inputs
 
-        mean_vector /= len(mean_std_loader)
-        std_vector /= len(mean_std_loader)
-
-    return mean_vector, std_vector
+    return mean, std
 
 
 batch_size = 16
