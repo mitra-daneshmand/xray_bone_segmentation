@@ -11,7 +11,6 @@ from torch.utils.tensorboard import SummaryWriter
 from seed import seed
 from components import checkpoint, metrics, losses
 from model import UNetLext
-import monai
 
 
 cv2.ocl.setUseOpenCL(False)
@@ -36,8 +35,7 @@ class ModelTrainer:
         self.paths_weights_fold['segm'] = os.path.join('sessions', 'segm', f'fold_{self.fold_idx}')
         os.makedirs(self.paths_weights_fold['segm'], exist_ok=True)
 
-        self.path_logs_fold = \
-            os.path.join('sessions', f'fold_{self.fold_idx}')
+        self.path_logs_fold = os.path.join('sessions', f'fold_{self.fold_idx}')
         os.makedirs(self.path_logs_fold, exist_ok=True)
 
         self.handlers_ckpt = dict()
@@ -48,26 +46,36 @@ class ModelTrainer:
 
         # Initialize and configure the models
         self.models = dict()
-        self.models['segm'] = UNetLext()  # build_unet()
+        self.models['segm'] = UNetLext(input_channels=1,
+                                       output_channels=3,
+                                       center_depth=1,
+                                       pretrained=False,
+                                       path_pretrained='',
+                                       restore_weights=False,
+                                       path_weights=paths_ckpt_sel['segm']
+                                       )
         self.models['segm'] = nn.DataParallel(self.models['segm'])
         self.models['segm'] = self.models['segm'].to(maybe_gpu)
 
         # Configure the training
+        self.num_epoch = 200
         self.optimizers = dict()
         self.optimizers['segm'] = (optim.Adam(
             self.models['segm'].parameters(),
-            lr=1e-3,
+            lr=0.0001,
             weight_decay=5e-5))
 
         self.lr_update_rule = {30: 0.1}
 
         self.losses = dict()
-        # self.losses['segm'] = losses.CrossEntropyLoss(
-        #     num_classes=1,
-        # )
-        self.losses['segm'] = monai.losses.DiceCELoss(softmax=True)
+        self.losses['segm'] = dict()
+        self.losses['segm']['dice_loss'] = losses.GeneralizedDice(idc=[1, 2])
+        self.losses['segm']['boundary_loss'] = losses.BoundaryLoss(idc=[1, 2])
 
-        self.losses['segm'] = self.losses['segm'].to(maybe_gpu)
+        # self.losses['segm'] = losses.CrossEntropyLoss(num_classes=3)
+        # self.losses['segm'] = monai.losses.DiceCELoss(softmax=True)
+
+        # self.losses['segm'] = self.losses['segm'].to(maybe_gpu)
 
         self.tensorboard = SummaryWriter(self.path_logs_fold)
 
@@ -79,7 +87,7 @@ class ModelTrainer:
         metrics_acc['samplew'] = defaultdict(list)
         metrics_acc['batchw'] = defaultdict(list)
         metrics_acc['datasetw'] = defaultdict(list)
-        metrics_acc['datasetw'][f'{name_ds}__cm'] = np.zeros((1,) * 2, dtype=np.uint32)
+        metrics_acc['datasetw'][f'{name_ds}__cm'] = np.zeros((3,) * 2, dtype=np.uint32)
 
         prog_bar_params = {'postfix': {'epoch': epoch_idx}, }
 
@@ -92,6 +100,7 @@ class ModelTrainer:
                                     'desc': f'Train, epoch {epoch_idx}'})
 
             loader_ds_iter = iter(loader_ds)
+            alpha = 0.01
 
             with tqdm(**prog_bar_params) as prog_bar:
                 for step_idx in range(steps_ds):
@@ -102,16 +111,19 @@ class ModelTrainer:
                     xs_ds, ys_true_ds = data_batch_ds['xs'], data_batch_ds['ys']
                     fnames_acc['oai'].extend(data_batch_ds['path_image'])
 
-                    # ys_true_arg_ds = torch.argmax(ys_true_ds.long(), dim=1)
-                    # print(ys_true_arg_ds)
+                    ys_true_arg_ds = torch.argmax(ys_true_ds.long(), dim=1)
                     xs_ds = xs_ds.to(maybe_gpu)
                     # ys_true_arg_ds = ys_true_arg_ds.to(maybe_gpu)
-                    ys_true_ds = ys_true_ds.to(maybe_gpu)
 
                     ys_pred_ds = self.models['segm'](xs_ds)
-                    # print(ys_pred_ds)
-                    loss_segm = self.losses['segm'](input=ys_pred_ds,
-                                                    target=ys_true_ds)
+
+                    # loss_segm = self.losses['segm'](input=ys_pred_ds,
+                    #                                 target=ys_true_arg_ds)
+
+                    ys_pred_softmax_ds = nn.Softmax(dim=1)(ys_pred_ds)
+                    gdl_loss = self.losses['segm']['dice_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
+                    bl_loss = self.losses['segm']['boundary_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
+                    loss_segm = gdl_loss + alpha * bl_loss
 
                     metrics_acc['batchw']['loss'].append(loss_segm.item())
 
@@ -129,6 +141,7 @@ class ModelTrainer:
 
             loader_ds_iter = iter(loader_ds)
 
+            alpha = 0.01
             with torch.no_grad(), tqdm(**prog_bar_params) as prog_bar:
                 for step_idx in range(steps_ds):
                     data_batch_ds = next(loader_ds_iter)
@@ -136,14 +149,19 @@ class ModelTrainer:
                     xs_ds, ys_true_ds = data_batch_ds['xs'], data_batch_ds['ys']
                     fnames_acc['oai'].extend(data_batch_ds['path_image'])
 
-                    # ys_true_arg_ds = torch.argmax(ys_true_ds.long(), dim=1)
+                    ys_true_arg_ds = torch.argmax(ys_true_ds.long(), dim=1)
                     xs_ds = xs_ds.to(maybe_gpu)
-                    # ys_true_arg_ds = ys_true_arg_ds.to(maybe_gpu)
-                    ys_true_arg_ds = ys_true_ds.to(maybe_gpu)
+                    ys_true_arg_ds = ys_true_arg_ds.to(maybe_gpu)
 
                     ys_pred_ds = self.models['segm'](xs_ds)
-                    loss_segm = self.losses['segm'](input=ys_pred_ds,
-                                                    target=ys_true_arg_ds)
+
+                    # loss_segm = self.losses['segm'](input=ys_pred_ds,
+                    #                                 target=ys_true_arg_ds)
+
+                    ys_pred_softmax_ds = nn.Softmax(dim=1)(ys_pred_ds)
+                    gdl_loss = self.losses['segm']['dice_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
+                    bl_loss = self.losses['segm']['boundary_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
+                    loss_segm = gdl_loss + alpha * bl_loss
 
                     metrics_acc['batchw']['loss'].append(loss_segm.item())
 
@@ -155,7 +173,7 @@ class ModelTrainer:
                     ys_true_arg_np_ds = ys_true_arg_ds.to('cpu').numpy()
 
                     metrics_acc['datasetw'][f'{name_ds}__cm'] += metrics.confusion_matrix(
-                        ys_pred_arg_np_ds, ys_true_arg_np_ds, 1)
+                        ys_pred_arg_np_ds, ys_true_arg_np_ds, 3)
 
                     prog_bar.update(1)
 
@@ -163,6 +181,7 @@ class ModelTrainer:
             metrics_acc['samplew'][k] = np.asarray(v)
         metrics_acc['datasetw'][f'{name_ds}__dice_score'] = np.asarray(
             metrics.dice_score_from_cm(metrics_acc['datasetw'][f'{name_ds}__cm']))
+
         return metrics_acc, fnames_acc
 
     def fit(self, loaders):
@@ -173,10 +192,9 @@ class ModelTrainer:
         metrics_val_best = dict()
         fnames_val_best = []
 
-        for epoch_idx in range(100):
+        for epoch_idx in range(self.num_epoch):
             self.models = {n: m.train() for n, m in self.models.items()}
-            metrics_train, fnames_train = \
-                self.run_one_epoch(epoch_idx, loaders)
+            metrics_train, fnames_train = self.run_one_epoch(epoch_idx, loaders)
 
             # Process the accumulated metrics
             for k, v in metrics_train['batchw'].items():
@@ -238,6 +256,9 @@ class ModelTrainer:
             # Save the model
             loss_curr = metrics_val['datasetw']['loss']
             print('Loss=', loss_curr)
+
+            # if loss_curr < 0 or epoch_idx<20:
+            #     loss_curr = 3
             if loss_curr < loss_best:
                 loss_best = loss_curr
                 epoch_idx_best = epoch_idx
@@ -260,4 +281,6 @@ class ModelTrainer:
         logger.info(msg)
         return (metrics_train_best, fnames_train_best,
                 metrics_val_best, fnames_val_best)
+
+
 
