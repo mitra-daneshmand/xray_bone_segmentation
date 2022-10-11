@@ -1,27 +1,33 @@
-import os
-import glob
 import cv2
-import pandas as pd
 import numpy as np
 from torch.utils.data.dataset import Dataset
-import nyaggle.validation.split as split
 
 
 H = 385
 W = 245
+
+
 def read_image(path_file):
     image = cv2.imread(path_file, cv2.IMREAD_GRAYSCALE)
-    if 'L' in path_file:
-        image = cv2.flip(image, 1)
     image = cv2.resize(image, (W, H))
-    return image.reshape((1, *image.shape))
+    image = image.reshape((1, *image.shape))
+    return image
 
 
 def read_mask(path_file):
     mask = cv2.imread(path_file, cv2.IMREAD_GRAYSCALE)
+
     if mask is not None:
         mask = cv2.resize(mask, (W, H))
-        return mask.reshape((1, *mask.shape))
+        mask[(mask != 255) & (mask != 233)] = 0
+        mask[mask == 255] = 1
+        mask[mask == 233] = 2
+        ret = np.empty((3, *mask.shape), dtype=mask.dtype)
+        ret[0, :, :] = 0
+        ret[1, :, :] = np.isin(mask, 1).astype(np.uint8)
+        ret[2, :, :] = np.isin(mask, 2).astype(np.uint8)
+
+        return ret
     else:
         return mask
 
