@@ -77,7 +77,6 @@ class ToTensor(object):
                 tmp.append(torch.from_numpy(e))
             else:
                 tmp.append(None)
-        # return [torch.from_numpy(e) for e in args]
         return tmp
 
 
@@ -182,22 +181,15 @@ class Scale(object):
             d1_o = math.floor(d1_i * self.state['r'])
             d1_o = d1_o + d1_o % 2
 
-            # img1 = cv2.copyMakeBorder(img, limit, limit, limit, limit,
-            #                           borderType=cv2.BORDER_REFLECT_101)
             img = np.squeeze(img)
             img = cv2.resize(img, (d1_o, d0_o), interpolation=cv2.INTER_LINEAR)
             img = img[None, ...]
 
-            # cv2.imwrite('./sessions/4.png', img[0, :, :])
-
             if mask is not None:
-                mask = np.squeeze(mask)
-                mask = cv2.resize(mask, (d1_o, d0_o), interpolation=cv2.INTER_LINEAR)
-                mask = mask[None, ...]
-                # tmp = np.empty((mask.shape[0], d1_o, d0_o), dtype=mask.dtype)
-                # for idx_ch, mask_ch in enumerate(mask):
-                #     tmp[idx_ch] = cv2.resize(mask_ch, (d1_o, d0_o), interpolation=cv2.INTER_NEAREST)
-                # mask = tmp
+                tmp = np.empty((mask.shape[0], d0_o, d1_o), dtype=mask.dtype)
+                for idx_ch, mask_ch in enumerate(mask):
+                    tmp[idx_ch] = cv2.resize(mask_ch, (d1_o, d0_o), interpolation=cv2.INTER_NEAREST)
+                mask = tmp
         return img, mask
 
     def randomize(self):
@@ -214,8 +206,6 @@ class Crop(object):
             self.output_size = output_size
         else:
             raise ValueError('Incorrect value')
-        # self.keep_size = keep_size
-        # self.prob = prob
 
         self.state = dict()
         self.randomize()
@@ -232,14 +222,12 @@ class Crop(object):
         c1 = c0 + cols_out
 
         img = np.ascontiguousarray(img[:, r0:r1, c0:c1])
-        # cv2.imwrite('./sessions/5.png', img[0, :, :])
 
         if mask is not None:
             mask = np.ascontiguousarray(mask[:, r0:r1, c0:c1])
         return img, mask
 
     def randomize(self):
-        # self.state['p'] = random.random()
         self.state['r0f'] = random.random()
         self.state['c0f'] = random.random()
 
@@ -307,11 +295,12 @@ class GammaCorrection(object):
         mask: (ch, d0, d1) ndarray
         """
         if self.state['p'] < self.prob:
+            import cv2
+            cv2.imwrite('./sessions/3.png', image[0, :, :])
             image = image ** (1 / self.state['gamma'])
             # TODO: implement also for integers
-            image = np.clip(image, 0, 1)
-            # import cv2
-            # cv2.imwrite('./sessions/4.png', image[0, :, :])
+
+            cv2.imwrite('./sessions/4.png', image[0, :, :])
         return image, mask
 
     def randomize(self):
