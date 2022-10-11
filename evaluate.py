@@ -38,9 +38,9 @@ dataset_test = DatasetOAIfor(
         df_meta=test_set,
         transforms=[
             # custom.PercentileClippingAndToFloat(cut_min=10, cut_max=30),
-            # trnsfrms.CenterCrop(height=355, width=215),
+            # transform.CenterCrop(height=355, width=215),
             custom.Normalize(mean=mean, std=std),
-            trnsfrms.ToTensor()]
+            transform.ToTensor()]
         )
 loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8,
                                          pin_memory=torch.cuda.is_available())
