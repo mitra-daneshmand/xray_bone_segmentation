@@ -11,15 +11,12 @@ import cv2
 import tifffile
 import torch
 import torch.nn as nn
-from torch.utils.data.dataloader import DataLoader
 
 from model import UNetLext
 from components import checkpoint
-from preproc import transforms
 from seed import seed
 
-# The fix is a workaround to PyTorch multiprocessing issue:
-# "RuntimeError: received 0 items of ancdata"
+
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 cv2.ocl.setUseOpenCL(False)
@@ -51,7 +48,14 @@ def predict_folds(loader, fold_idcs):
         paths_ckpt_sel['segm'] = handlers_ckpt['segm'].get_last_ckpt()
 
         # Initialize and configure the model
-        model = UNetLext()
+        model = UNetLext(input_channels=1,
+                         output_channels=3,
+                         center_depth=1,
+                         pretrained=True,
+                         path_pretrained=paths_ckpt_sel['segm'],
+                         restore_weights=True,
+                         path_weights=paths_ckpt_sel['segm']
+                         )
         model = nn.DataParallel(model).to(maybe_gpu)
         model.eval()
 
@@ -63,7 +67,7 @@ def predict_folds(loader, fold_idcs):
                 ys_pred = model(xs)
 
                 ys_pred_softmax = nn.Softmax(dim=1)(ys_pred)
-                ys_pred_softmax_np = ys_pred_softmax.detach().to('cpu').numpy()
+                ys_pred_softmax_np = ys_pred_softmax.to('cpu').numpy()
 
                 data_batch['pred_softmax'] = ys_pred_softmax_np
 
@@ -72,7 +76,7 @@ def predict_folds(loader, fold_idcs):
                               for n in range(len(data_batch['image']))]
 
                 for k, data_dict in enumerate(data_dicts):
-                    dir_base = os.path.join('predictions', str(data_dict['ID']))
+                    dir_base = os.path.join('predictions', str(data_dict['ID'])[-8:-1])
                     fname_base = os.path.splitext(os.path.basename(data_dict['path_image']))[0]
 
                     # Save the predictions
@@ -80,15 +84,17 @@ def predict_folds(loader, fold_idcs):
                     if not os.path.exists(dir_predicts):
                         os.makedirs(dir_predicts)
 
-                    fname_full = os.path.join(dir_predicts, f'{fname_base}_fold_{fold_idx}.tiff')
+                    fname_full = os.path.join(
+                        dir_predicts,
+                        f'{fname_base}_fold_{fold_idx}.tiff')
 
                     tmp = (data_dict['pred_softmax'] * 255).astype(np.uint8, casting='unsafe')
-                    tifffile.imwrite(fname_full, tmp)
+                    tifffile.imsave(fname_full, tmp)
 
                 prog_bar.update(1)
 
 
-def merge_predictions(loader, save_plots=False, remove_foldw=False):
+def merge_predictions(loader, save_plots=False):
     """Merge the predictions over all folds
     """
     dir_source_root = ''
@@ -97,33 +103,21 @@ def merge_predictions(loader, save_plots=False, remove_foldw=False):
     with tqdm(total=len(df_meta), desc='Merge') as prog_bar:
         for i, row in df_meta.iterrows():
             dir_scan_predicts = os.path.join('predictions', str(row['ID']))
-            dir_image_prep = os.path.join(dir_scan_predicts, 'image_prep')
-            dir_mask_prep = os.path.join(dir_scan_predicts, 'mask_prep')
             dir_mask_folds = os.path.join(dir_scan_predicts, 'mask_folds')
             dir_mask_foldavg = os.path.join(dir_scan_predicts, 'mask_foldavg')
             dir_vis_foldavg = os.path.join(dir_scan_predicts, 'vis_foldavg')
 
-            for p in (dir_image_prep, dir_mask_prep, dir_mask_folds, dir_mask_foldavg,
-                      dir_vis_foldavg):
+            for p in (dir_mask_folds, dir_mask_foldavg, dir_vis_foldavg):
                 if not os.path.exists(p):
                     os.makedirs(p)
 
             # Find the corresponding prediction files
             fname_base = os.path.splitext(os.path.basename(row['path_image']))[0]
-
             fnames_pred = glob(os.path.join(dir_mask_folds, f'{fname_base}_fold_*.*'))
 
             # Read the reference data
             image = cv2.imread(os.path.join(dir_source_root, row['path_image']), cv2.IMREAD_GRAYSCALE)
-            image = transforms.CenterCrop(height=355, width=215)(image[None, ])[0]  # dict_fns['crop'](image[None, ])[0]
-            image = np.squeeze(image)
-            if 'path_mask' in row.index:
-                ys_true = loader.dataset.read_mask(
-                    os.path.join(dir_source_root, row['path_mask']))
-                if ys_true is not None:
-                    ys_true = transforms.CenterCrop(height=355, width=215)(ys_true)[0]  # dict_fns['crop'](ys_true)[0]
-            else:
-                ys_true = None
+            image = cv2.resize(image, (245, 385))
 
             # Read the fold-wise predictions
             yss_pred = [tifffile.imread(f) for f in fnames_pred]
@@ -137,17 +131,6 @@ def merge_predictions(loader, save_plots=False, remove_foldw=False):
 
             ys_pred_arg_np = ys_pred_softmax_np.argmax(axis=0)
 
-            # Save preprocessed input data
-            fname_full = os.path.join(dir_image_prep, f'{fname_base}.png')
-            cv2.imwrite(fname_full, image)  # image
-
-            if ys_true is not None:
-                ys_true = ys_true.astype(np.float32)
-                ys_true = torch.from_numpy(ys_true).unsqueeze(dim=0)
-                ys_true_arg_np = ys_true.numpy().squeeze().argmax(axis=0)
-                fname_full = os.path.join(dir_mask_prep, f'{fname_base}.png')
-                cv2.imwrite(fname_full, ys_true_arg_np)  # mask
-
             fname_meta = os.path.join('predictions', 'meta_dynamic.csv')
             if not os.path.exists(fname_meta):
                 df_meta.to_csv(fname_meta, index=False)  # metainfo
@@ -158,44 +141,17 @@ def merge_predictions(loader, save_plots=False, remove_foldw=False):
 
             # Save ensemble visualizations
             if save_plots:
-                if ys_true is not None:
-                    fname_full = os.path.join(
-                        dir_vis_foldavg, f"{fname_base}_overlay_mask.png")
-                    save_vis_overlay(image=image,
-                                     mask=ys_true_arg_np,
-                                     num_classes=1,
-                                     fname=fname_full)
-
                 fname_full = os.path.join(
                     dir_vis_foldavg, f"{fname_base}_overlay_pred.png")
                 save_vis_overlay(image=image,
                                  mask=ys_pred_arg_np,
-                                 num_classes=1,
                                  fname=fname_full)
-
-                if ys_true is not None:
-                    fname_full = os.path.join(
-                        dir_vis_foldavg, f"{fname_base}_overlay_diff.png")
-                    save_vis_mask_diff(image=image,
-                                       mask_true=ys_true_arg_np,
-                                       mask_pred=ys_pred_arg_np,
-                                       fname=fname_full)
-
-            # Remove the fold predictions
-            if remove_foldw:
-                for f in fnames_pred:
-                    try:
-                        os.remove(f)
-                    except OSError:
-                        logger.error(f'Cannot remove {f}')
             prog_bar.update(1)
 
 
-def save_vis_overlay(image, mask, num_classes, fname):
-    # Add a sample of each class to have consistent class colors
-    mask[0, :num_classes] = list(range(num_classes))
+def save_vis_overlay(image, mask, fname):
     overlay = label2rgb(label=mask, image=image, bg_label=0,
-                        colors=['orangered', 'gold', 'lime', 'fuchsia'])
+                        colors=['lime', 'dodgerblue'])
     # Convert to uint8 to save space
     overlay = img_as_ubyte(overlay)
     # Save to file
@@ -204,20 +160,4 @@ def save_vis_overlay(image, mask, num_classes, fname):
     cv2.imwrite(fname, overlay)
 
 
-def save_vis_mask_diff(image, mask_true, mask_pred, fname):
-    diff = np.empty_like(mask_true)
-    diff[(mask_true == mask_pred) & (mask_pred == 0)] = 0  # TN
-    diff[(mask_true == mask_pred) & (mask_pred != 0)] = 0  # TP
-    diff[(mask_true != mask_pred) & (mask_pred == 0)] = 2  # FP
-    diff[(mask_true != mask_pred) & (mask_pred != 0)] = 3  # FN
-    diff_colors = ('green', 'red', 'yellow')
-    diff[0, :4] = [0, 1, 2, 3]
-    overlay = label2rgb(label=diff, image=image, bg_label=0,
-                        colors=diff_colors)
-    # Convert to uint8 to save space
-    overlay = img_as_ubyte(overlay)
-    # Save to file
-    if overlay.ndim == 3:
-        overlay = overlay[:, :, ::-1]
-    cv2.imwrite(fname, overlay)
 
