@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 import pandas as pd
 from dataset import DatasetOAIfor
-from preproc import custom, trnsfrms
+from preproc import custom, transform
 from evaluation_tools import predict_folds, merge_predictions
 
 
