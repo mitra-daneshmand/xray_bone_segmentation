@@ -91,7 +91,7 @@ for fold_num in range(5):
         df_meta=train_set,
         transforms=[
             transform.HorizontalFlip(prob=.5),
-            # transform.GammaCorrection(gamma_range=(0.5, 1.5), prob=.5),
+            transform.GammaCorrection(gamma_range=(0.5, 1.5), prob=.5),
             transform.OneOf([
                 transform.DualCompose([
                     transform.Scale(ratio_range=(0.7, 0.8), prob=1.),
