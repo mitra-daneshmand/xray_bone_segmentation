@@ -72,17 +72,6 @@ def class2one_hot(seg: Tensor, K: int) -> Tensor:
     return res
 
 
-def probs2one_hot(probs: Tensor) -> Tensor:
-    _, K, *_ = probs.shape
-    assert simplex(probs)
-
-    res = class2one_hot(probs2class(probs), K)
-    assert res.shape == probs.shape
-    assert one_hot(res)
-
-    return res
-
-
 def one_hot2dist(seg: np.ndarray, resolution: Tuple[float, float, float] = None,
                  dtype=None) -> np.ndarray:
     assert one_hot(torch.tensor(seg), axis=0)
