@@ -117,7 +117,7 @@ class UNetLext(nn.Module):
     """UNet architecture with 3x3 convolutions. Created dynamically based on depth and width.
     """
     def __init__(self, basic_width=32, depth=7, center_depth=2,
-                 input_channels=1, output_channels=1,
+                 input_channels=3, output_channels=1,
                  convolution='regular', activation='relu',
                  pretrained=False, path_pretrained=None,
                  restore_weights=False, path_weights=None, **kwargs):
