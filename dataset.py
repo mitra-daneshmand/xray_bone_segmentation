@@ -3,13 +3,12 @@ import numpy as np
 from torch.utils.data.dataset import Dataset
 
 
-H = 385
-W = 245
+H = 940
+W = 673
 
 
 def read_image(path_file):
     image = cv2.imread(path_file, cv2.IMREAD_GRAYSCALE)
-    image = cv2.resize(image, (W, H))
     image = image.reshape((1, *image.shape))
     return image
 
@@ -18,14 +17,15 @@ def read_mask(path_file):
     mask = cv2.imread(path_file, cv2.IMREAD_GRAYSCALE)
 
     if mask is not None:
-        mask = cv2.resize(mask, (W, H))
-        mask[(mask != 255) & (mask != 233)] = 0
         mask[mask == 255] = 1
         mask[mask == 233] = 2
-        ret = np.empty((3, *mask.shape), dtype=mask.dtype)
-        ret[0, :, :] = 0
-        ret[1, :, :] = np.isin(mask, 1).astype(np.uint8)
-        ret[2, :, :] = np.isin(mask, 2).astype(np.uint8)
+        ret = np.empty((3, *(mask.shape[0], mask.shape[1])), dtype=mask.dtype)
+        ret[0, :, :] = mask[:, :, 1] + mask[:, :, 2]
+        ret[0, :, :][ret[0, :, :] != 0] = 3
+        ret[0, :, :][ret[0, :, :] == 0] = 1
+        ret[0, :, :][ret[0, :, :] == 3] = 0
+        ret[1, :, :] = np.isin(mask[:, :, 1], 1).astype(np.uint8)
+        ret[2, :, :] = np.isin(mask[:, :, 2], 2).astype(np.uint8)
 
         return ret
     else:
