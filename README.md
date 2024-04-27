@@ -12,11 +12,13 @@ Considering the pixel spacing with a range between 0.20 and 0.40, the results in
 These values indicate a very high degree of similarity between the predicted and ground truth masks (Figure. 1)
 
 ![Figure.1: Segmentation quality metrics for femur and tibia. (a) Average Surface Distance. (b) Dice Score. ](figs/figure1.jpeg)
+
 Figure.1: Segmentation quality metrics for femur and tibia. (a) Average Surface Distance. (b) Dice Score. 
 
 Figure 2 illustrates a sample of the automatic segmentation results.
 
 ![Figure.2: A segmentation sample.](figs/figure2.jpeg)
+
 Figure.2: A segmentation sample. 
 
 
