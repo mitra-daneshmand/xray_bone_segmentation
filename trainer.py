@@ -72,11 +72,6 @@ class ModelTrainer:
         self.losses['segm']['dice_loss'] = losses.GeneralizedDice(idc=[1, 2])
         self.losses['segm']['boundary_loss'] = losses.BoundaryLoss(idc=[1, 2])
 
-        # self.losses['segm'] = losses.CrossEntropyLoss(num_classes=3)
-        # self.losses['segm'] = monai.losses.DiceCELoss(softmax=True)
-
-        # self.losses['segm'] = self.losses['segm'].to(maybe_gpu)
-
         self.tensorboard = SummaryWriter(self.path_logs_fold)
 
     def run_one_epoch(self, epoch_idx, loaders):
@@ -113,16 +108,13 @@ class ModelTrainer:
 
                     ys_true_arg_ds = torch.argmax(ys_true_ds.long(), dim=1)
                     xs_ds = xs_ds.to(maybe_gpu)
-                    # ys_true_arg_ds = ys_true_arg_ds.to(maybe_gpu)
 
                     ys_pred_ds = self.models['segm'](xs_ds)
 
-                    # loss_segm = self.losses['segm'](input=ys_pred_ds,
-                    #                                 target=ys_true_arg_ds)
-
                     ys_pred_softmax_ds = nn.Softmax(dim=1)(ys_pred_ds)
+                    gt_sdf = losses.compute_sdf(ys_true_ds.cpu().numpy(), ys_pred_ds.detach().to('cpu').numpy().shape)
                     gdl_loss = self.losses['segm']['dice_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
-                    bl_loss = self.losses['segm']['boundary_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
+                    bl_loss = self.losses['segm']['boundary_loss'](ys_pred_softmax_ds, torch.from_numpy(gt_sdf).to(maybe_gpu))
                     loss_segm = gdl_loss + alpha * bl_loss
 
                     metrics_acc['batchw']['loss'].append(loss_segm.item())
@@ -159,8 +151,9 @@ class ModelTrainer:
                     #                                 target=ys_true_arg_ds)
 
                     ys_pred_softmax_ds = nn.Softmax(dim=1)(ys_pred_ds)
+                    gt_sdf = losses.compute_sdf(ys_true_ds.cpu().numpy(), ys_pred_ds.detach().to('cpu').numpy().shape)
                     gdl_loss = self.losses['segm']['dice_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
-                    bl_loss = self.losses['segm']['boundary_loss'](ys_pred_softmax_ds, ys_true_ds.to(maybe_gpu))
+                    bl_loss = self.losses['segm']['boundary_loss'](ys_pred_softmax_ds, torch.from_numpy(gt_sdf).to(maybe_gpu))
                     loss_segm = gdl_loss + alpha * bl_loss
 
                     metrics_acc['batchw']['loss'].append(loss_segm.item())
@@ -257,9 +250,7 @@ class ModelTrainer:
             loss_curr = metrics_val['datasetw']['loss']
             print('Loss=', loss_curr)
 
-            # if loss_curr < 0 or epoch_idx<20:
-            #     loss_curr = 3
-            if loss_curr < loss_best:
+            if 0 < loss_curr < loss_best:
                 loss_best = loss_curr
                 epoch_idx_best = epoch_idx
                 metrics_train_best = metrics_train
