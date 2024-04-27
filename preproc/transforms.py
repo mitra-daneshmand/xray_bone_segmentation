@@ -34,36 +34,6 @@ class OneOf(object):
         self.state['t'].prob = 1.
 
 
-class OneOrOther(object):
-    def __init__(self, first, second, prob=.5):
-        self.first = first
-        first.prob = 1.
-        self.second = second
-        second.prob = 1.
-        self.prob = prob
-
-        self.state = dict()
-        self.randomize()
-
-    def __call__(self, x, mask=None):
-        if self.state['p'] < self.prob:
-            x, mask = self.first(x, mask)
-        else:
-            x, mask = self.second(x, mask)
-        return x, mask
-
-    def randomize(self):
-        self.state['p'] = random.random()
-
-
-class ImageOnly(object):
-    def __init__(self, transform):
-        self.transform = transform
-
-    def __call__(self, img, mask=None):
-        return self.transform(img, None)[0], mask
-
-
 class NoTransform(object):
     def __call__(self, *args):
         return args
@@ -78,30 +48,6 @@ class ToTensor(object):
             else:
                 tmp.append(None)
         return tmp
-
-
-class VerticalFlip(object):
-    def __init__(self, prob=.5):
-        self.prob = prob
-
-        self.state = dict()
-        self.randomize()
-
-    def __call__(self, img, mask=None):
-        """
-        Parameters
-        ----------
-        img: (ch, d0, d1) ndarray
-        mask: (ch, d0, d1) ndarray
-        """
-        if self.state['p'] < self.prob:
-            img = np.flip(img, axis=1)
-            if mask is not None:
-                mask = np.flip(mask, axis=1)
-        return img, mask
-
-    def randomize(self):
-        self.state['p'] = random.random()
 
 
 class HorizontalFlip(object):
@@ -258,73 +204,4 @@ class CenterCrop(object):
 
         return img, mask
 
-
-class Pad(object):
-    def __init__(self, dr, dc, **kwargs):
-        self.dr = dr
-        self.dc = dc
-        self.kwargs = kwargs
-
-    def __call__(self, img, mask=None):
-        """
-        Parameters
-        ----------
-        img: (ch, d0, d1) ndarray
-        mask: (ch, d0, d1) ndarray
-        """
-        pad_width = (0, 0), (self.dr,) * 2, (self.dc,) * 2
-        img = np.pad(img, pad_width, **self.kwargs)
-        if mask is not None:
-            mask = np.pad(mask, pad_width, **self.kwargs)
-        return img, mask
-
-
-class GammaCorrection(object):
-    def __init__(self, gamma_range=(0.5, 2), prob=0.5):
-        self.gamma_range = gamma_range
-        self.prob = prob
-
-        self.state = dict()
-        self.randomize()
-
-    def __call__(self, image, mask=None):
-        """
-        Parameters
-        ----------
-        img: (ch, d0, d1) ndarray
-        mask: (ch, d0, d1) ndarray
-        """
-        if self.state['p'] < self.prob:
-            import cv2
-            cv2.imwrite('./sessions/3.png', image[0, :, :])
-            image = image ** (1 / self.state['gamma'])
-            # TODO: implement also for integers
-
-            cv2.imwrite('./sessions/4.png', image[0, :, :])
-        return image, mask
-
-    def randomize(self):
-        self.state['p'] = random.random()
-        self.state['gamma'] = random.uniform(*self.gamma_range)
-
-
-class BilateralFilter(object):
-    def __init__(self, d, sigma_color, sigma_space, prob=.5):
-        self.d = d
-        self.sigma_color = sigma_color
-        self.sigma_space = sigma_space
-        self.prob = prob
-
-        self.state = dict()
-        self.randomize()
-
-    def __call__(self, img, mask=None):
-        if self.state['p'] < self.prob:
-            img = np.squeeze(img)
-            img = cv2.bilateralFilter(img, self.d, self.sigma_color, self.sigma_space)
-            img = img[None, ...]
-        return img, mask
-
-    def randomize(self):
-        self.state['p'] = random.random()
 
