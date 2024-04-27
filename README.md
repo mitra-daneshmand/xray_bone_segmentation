@@ -9,3 +9,7 @@ This repository contains the code and model for deep learning-based segmentation
 
 
 ![Figure.1: Segmentation quality metrics for femur and tibia. (a) Average Surface Distance. (b) Dice Score. ](figs/figure1.jpeg)
+Figure.1: Segmentation quality metrics for femur and tibia. (a) Average Surface Distance. (b) Dice Score. 
+
+
+
