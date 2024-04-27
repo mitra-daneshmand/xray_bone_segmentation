@@ -34,7 +34,7 @@ def confusion_matrix(input_, target, num_classes):
     cm, _ = np.histogramdd(
         replace_indices,
         bins=(num_classes, num_classes),
-        range=[(0, num_classes - 1), (0, num_classes - 1)]
+        range=[(0, num_classes), (0, num_classes)]
     )
     return cm.astype(np.uint32)
 
