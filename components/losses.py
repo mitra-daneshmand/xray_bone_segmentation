@@ -15,44 +15,6 @@ else:
     maybe_gpu = 'cpu'
 
 
-class CrossEntropyLoss(nn.Module):
-    def __init__(self, num_classes, batch_avg=True, batch_weight=None,
-                 class_avg=True, class_weight=None, **kwargs):
-        """
-        Parameters
-        ----------
-        batch_avg:
-            Whether to average over the batch dimension.
-        batch_weight:
-            Batch samples importance coefficients.
-        class_avg:
-            Whether to average over the class dimension.
-        class_weight:
-            Classes importance coefficients.
-        """
-        super().__init__()
-        self.num_classes = num_classes
-        self.batch_avg = batch_avg
-        self.class_avg = class_avg
-        self.batch_weight = batch_weight
-        self.class_weight = class_weight
-        logger.warning('Redundant loss function arguments:\n{}'
-                       .format(repr(kwargs)))
-        self.ce = nn.CrossEntropyLoss(weight=class_weight)
-
-    def forward(self, input, target):
-        """
-        Parameters
-        ----------
-        input_: (b, ch, d0, d1) tensor
-        target: (b, d0, d1) tensor
-        Returns
-        -------
-        out: float tensor
-        """
-        return self.ce(input, target)
-
-
 class GeneralizedDice():
     def __init__(self, **kwargs):
         # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
@@ -71,6 +33,35 @@ class GeneralizedDice():
         loss = divided.mean()
 
         return loss.to(maybe_gpu)
+
+
+def compute_sdf(img_gt, out_shape):
+    """
+    compute the signed distance map of binary mask
+    input: segmentation, shape = (batch_size, x, y, z)
+    output: the Signed Distance Map (SDM)
+    sdf(x) = 0; x in segmentation boundary
+             -inf|x-y|; x in segmentation
+             +inf|x-y|; x out of segmentation
+    """
+
+    img_gt = img_gt.astype(np.uint8)
+
+    gt_sdf = np.zeros(out_shape)
+
+    for b in range(out_shape[0]): # batch size
+        for c in range(1, out_shape[1]): # channel
+            posmask = img_gt[b][c].astype(np.bool)
+            if posmask.any():
+                negmask = ~posmask
+                posdis = distance_transform_edt(posmask)
+                negdis = distance_transform_edt(negmask)
+                boundary = skimage_seg.find_boundaries(posmask, mode='inner').astype(np.uint8)
+                sdf = negdis - posdis
+                sdf[boundary == 1] = 0
+                gt_sdf[b][c] = sdf
+
+    return gt_sdf
 
 
 class BoundaryLoss():
