@@ -91,7 +91,6 @@ for fold_num in range(5):
         df_meta=train_set,
         transforms=[
             transform.HorizontalFlip(prob=.5),
-            transform.GammaCorrection(gamma_range=(0.5, 1.5), prob=.5),
             transform.OneOf([
                 transform.DualCompose([
                     transform.Scale(ratio_range=(0.7, 0.8), prob=1.),
@@ -99,14 +98,14 @@ for fold_num in range(5):
                 ]),
                 transform.NoTransform()
             ]),
-            transform.Crop(output_size=(385, 245)),
+            transform.Crop(output_size=(940, 673)),
             custom.Normalize(mean=mean, std=std),
             transform.ToTensor()]
         )
     datasets[name_ds]['val'] = DatasetOAIfor(
         df_meta=val_set,
         transforms=[
-            transform.CenterCrop(height=385, width=245),
+            transform.CenterCrop(height=940, width=673),
             custom.Normalize(mean=mean, std=std),
             transform.ToTensor()]
         )
