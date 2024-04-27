@@ -24,7 +24,7 @@ def generate_ds(df):
     return df
 
 
-batch_size = 32
+batch_size = 4
 test_set = pd.read_csv('test_data.csv')
 test_set = generate_ds(test_set)
 
@@ -37,8 +37,6 @@ std = 83.7574
 dataset_test = DatasetOAIfor(
         df_meta=test_set,
         transforms=[
-            # custom.PercentileClippingAndToFloat(cut_min=10, cut_max=30),
-            # transform.CenterCrop(height=355, width=215),
             custom.Normalize(mean=mean, std=std),
             transform.ToTensor()]
         )
