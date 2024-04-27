@@ -6,8 +6,8 @@ This repository contains the code and model for deep learning-based segmentation
 
 Considering the pixel spacing with a range between 0.20 and 0.40, the results indicate that our model was able to segment the bone boundaries with very high accuracy. 
 
-- The segmentation model achieved an ASD of 0.01 ± 0.02 mm for femur and 0.02 ± 0.08 mm for tibia, indicating high accuracy in segmenting bone boundaries.
-- The DSC scores were 98.88 ± 0.01 for femur and 98.59 ± 0.01 for tibia, demonstrating a high degree of similarity between predicted and ground truth masks.
+- The segmentation model achieved an ASD of 0.01 ± 0.02 mm for femur and 0.02 ± 0.08 mm for tibia.
+- The DSC scores were 98.88 ± 0.01 for femur and 98.59 ± 0.01 for tibia.
 
 These values indicate a very high degree of similarity between the predicted and ground truth masks (Figure. 1)
 
