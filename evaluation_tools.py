@@ -117,7 +117,6 @@ def merge_predictions(loader, save_plots=False):
 
             # Read the reference data
             image = cv2.imread(os.path.join(dir_source_root, row['path_image']), cv2.IMREAD_GRAYSCALE)
-            image = cv2.resize(image, (245, 385))
 
             # Read the fold-wise predictions
             yss_pred = [tifffile.imread(f) for f in fnames_pred]
